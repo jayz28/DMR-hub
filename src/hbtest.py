@@ -52,8 +52,13 @@ def process_burst(data):
     vsq_or_type = int(data[15]) >> 4
     voice_seq = 'ABCDEF'[vsq_or_type] if vsq_or_type < 6 else vsq_or_type
     stream_id = int.from_bytes(data[16:20], byteorder='little')
+    
+    dmr_burst = data[20:]
 
-    print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\n\n")
+    
+
+
+    print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\ndata: {len(dmr_burst)}\n\n")
 
 
 
