@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import socket
 import hashlib
 import sys
@@ -11,7 +13,10 @@ def main(args):
     password = b'passw0rd'
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    
     sock.connect((master, port))
+    out_sock.connect(('127.0.0.1', 31000))
 
     sock.send(b'RPTL'+dmr_id)
     salt = udp_receive(sock, True)[-8:]
@@ -27,16 +32,24 @@ def main(args):
 
     sock.send(config)
     start = time.time()
+    
+    spin = '-\|/'
+    idx = 0
 
     while True:
         data = udp_receive(sock)
         if data and 'DMRD' in str(data):
-            process_burst(data)
+            (f1, f2, f3) = process_burst(data)
+            out_sock.send(f1+f2+f3)
         else:
             if time.time() - start > 15:
                 sock.send(b'MSTPING' + dmr_id)
                 start = time.time()
-            time.sleep(1)
+            else:
+                sys.stdout.write(spin[idx] + "\r")
+                sys.stdout.flush()
+                idx = (idx + 1)%len(spin)
+
 
     sock.close()
 
@@ -52,14 +65,22 @@ def process_burst(data):
     vsq_or_type = int(data[15]) >> 4
     voice_seq = 'ABCDEF'[vsq_or_type] if vsq_or_type < 6 else vsq_or_type
     stream_id = int.from_bytes(data[16:20], byteorder='little')
+
+    dmr_burst = data[20:]  # 33 bytes, 264 bits here
+
+    # the DMR AI burst consists of 2x 108bit payloads with a 48bit sync field
+    # inserted in between.  here we split the burst in order to reconsruct the
+    # payload
+    burst_bin_str = format(int.from_bytes(dmr_burst, 'big'), '0264b')
+    payload = burst_bin_str[:108] + burst_bin_str[-108:]  # the payload is the first and last 108 bits
     
-    dmr_burst = data[20:]
+    # there are 3x 72bit vocoder frames in each payload
+    frame1 = int(payload[:72], 2).to_bytes(9, 'big')
+    frame2 = int(payload[72:144], 2).to_bytes(9, 'big')
+    frame3 = int(payload[144:], 2).to_bytes(9, 'big')
 
-    
-
-
-    print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\ndata: {len(dmr_burst)}\n\n")
-
+    print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\ndata: {len(dmr_burst)}\npayload: {frame1} {frame2} {frame3}\n\n")
+    return (frame1, frame2, frame3)
 
 
 
