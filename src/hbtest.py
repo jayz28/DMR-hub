@@ -35,12 +35,19 @@ def main(args):
     
     spin = '-\|/'
     idx = 0
+    
+    length = 0
 
+    voice_buffer = []
+
+    sendall = out_sock.sendall
     while True:
         data = udp_receive(sock)
         if data and 'DMRD' in str(data):
             (f1, f2, f3) = process_burst(data)
-            out_sock.send(f1+f2+f3)
+            sendall(b'\x0A\x09' + f1, socket.MSG_DONTWAIT)
+            sendall(b'\x0A\x09' + f2, socket.MSG_DONTWAIT)
+            sendall(b'\x0A\x09' + f3, socket.MSG_DONTWAIT)
         else:
             if time.time() - start > 15:
                 sock.send(b'MSTPING' + dmr_id)
@@ -87,7 +94,7 @@ def process_burst(data):
 
 def udp_receive(sock, blocking=False):
     try:
-        data = sock.recv(1024, socket.MSG_DONTWAIT if not blocking else 0)
+        data = sock.recv(8192, socket.MSG_DONTWAIT if not blocking else 0)
     except:
         time.sleep(1)
         return ''
