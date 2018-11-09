@@ -16,7 +16,7 @@ def main(args):
     out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
     sock.connect((master, port))
-    out_sock.connect(('127.0.0.1', 31000))
+    out_sock.connect(('127.0.0.1', 31000))  # assume analog bridge listening on 31000
 
     sock.send(b'RPTL'+dmr_id)
     salt = udp_receive(sock, True)[-8:]
@@ -32,19 +32,17 @@ def main(args):
 
     sock.send(config)
     start = time.time()
-    
+
     spin = '-\|/'
     idx = 0
-    
-    length = 0
-
-    voice_buffer = []
 
     sendall = out_sock.sendall
     while True:
         data = udp_receive(sock)
         if data and 'DMRD' in str(data):
             (f1, f2, f3) = process_burst(data)
+
+            # send the frames to analog_bridge, using the TLV for 72bit frames
             sendall(b'\x0A\x09' + f1, socket.MSG_DONTWAIT)
             sendall(b'\x0A\x09' + f2, socket.MSG_DONTWAIT)
             sendall(b'\x0A\x09' + f3, socket.MSG_DONTWAIT)
@@ -55,8 +53,7 @@ def main(args):
             else:
                 sys.stdout.write(spin[idx] + "\r")
                 sys.stdout.flush()
-                idx = (idx + 1)%len(spin)
-
+                idx = (idx + 1) % len(spin)
 
     sock.close()
 
@@ -80,7 +77,7 @@ def process_burst(data):
     # payload
     burst_bin_str = format(int.from_bytes(dmr_burst, 'big'), '0264b')
     payload = burst_bin_str[:108] + burst_bin_str[-108:]  # the payload is the first and last 108 bits
-    
+
     # there are 3x 72bit vocoder frames in each payload
     frame1 = int(payload[:72], 2).to_bytes(9, 'big')
     frame2 = int(payload[72:144], 2).to_bytes(9, 'big')
@@ -88,8 +85,6 @@ def process_burst(data):
 
     print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\ndata: {len(dmr_burst)}\npayload: {frame1} {frame2} {frame3}\n\n")
     return (frame1, frame2, frame3)
-
-
 
 
 def udp_receive(sock, blocking=False):
