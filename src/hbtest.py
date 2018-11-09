@@ -91,10 +91,8 @@ def udp_receive(sock, blocking=False):
     try:
         data = sock.recv(8192, socket.MSG_DONTWAIT if not blocking else 0)
     except:
-        time.sleep(1)
         return ''
 
-    print(data)
     return data
 
 
