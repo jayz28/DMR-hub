@@ -4,9 +4,15 @@ import socket
 import hashlib
 import sys
 import time
+from dmr_utils import ambe_utils
+from bitarray import bitarray 
 
+global outfile
 
 def main(args):
+    global outfile
+
+
     master = '3103.repeater.net'
     port = 62030
     dmr_id = b'002F8A49'
@@ -37,15 +43,13 @@ def main(args):
     idx = 0
 
     sendall = out_sock.sendall
+    sendall(b'.amb')
+
     while True:
         data = udp_receive(sock)
         if data and 'DMRD' in str(data):
-            (f1, f2, f3) = process_burst(data)
-
-            # send the frames to analog_bridge, using the TLV for 72bit frames
-            sendall(b'\x0A\x09' + f1, socket.MSG_DONTWAIT)
-            sendall(b'\x0A\x09' + f2, socket.MSG_DONTWAIT)
-            sendall(b'\x0A\x09' + f3, socket.MSG_DONTWAIT)
+            ambe49_DSD = process_burst(data)
+            sendall(ambe49_DSD, socket.MSG_DONTWAIT)
         else:
             if time.time() - start > 15:
                 sock.send(b'MSTPING' + dmr_id)
@@ -60,6 +64,8 @@ def main(args):
 
 
 def process_burst(data):
+
+
     seq_no = int(data[4])
     src_id = int.from_bytes(data[5:8], byteorder='big')
     dest_id = int.from_bytes(data[8:11], byteorder='big')
@@ -76,16 +82,33 @@ def process_burst(data):
     # the DMR AI burst consists of 2x 108bit payloads with a 48bit sync field
     # inserted in between.  here we split the burst in order to reconsruct the
     # payload
-    burst_bin_str = format(int.from_bytes(dmr_burst, 'big'), '0264b')
-    payload = burst_bin_str[:108] + burst_bin_str[-108:]  # the payload is the first and last 108 bits
+    burst_binary = bitarray()
+    burst_binary.frombytes(dmr_burst)
+    payload_binary = burst_binary[:108] + burst_binary[-108:]
 
     # there are 3x 72bit vocoder frames in each payload
-    frame1 = int(payload[:72], 2).to_bytes(9, 'big')
-    frame2 = int(payload[72:144], 2).to_bytes(9, 'big')
-    frame3 = int(payload[144:], 2).to_bytes(9, 'big')
+    ambe72_frames = [payload_binary[:72], payload_binary[72:144], payload_binary[144:]]
 
-    print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\ndata: {len(dmr_burst)}\npayload: {frame1} {frame2} {frame3}\n\n")
-    return (frame1, frame2, frame3)
+    # convert to ambe49 frames to use the md380 emulator
+    ambe49_frames = [ambe_utils.convert72BitTo49BitAMBE(frame) for frame in ambe72_frames]
+
+    print(f"seq: {seq_no}\nsrc_id: {src_id}\ndest_id: {dest_id}\nrptr_id: {rptr_id}\nslot_no: {slot_no}\ncall_type: {call_type}\nframe_type: {frame_type}\nvoice_seq: {voice_seq}\nstream_id: {stream_id}\ndata: {len(dmr_burst)}\n\n")
+
+    # md380-emu takes DSD .amb file format as input
+    # construct DSD formatted frames
+
+    start_byte = bitarray('0' * 8)  # DSD frames start with 0x00
+
+    output = b''
+
+    for frame in ambe49_frames:
+        tail = bitarray('0' * 7)  # DSD frames are padded at the end
+        tail[-1] = frame[-1]  # DSD specifes that the last bit of ambe49 goes in the LSB
+        frame[-1] = 0
+        output += (start_byte + frame + tail).tobytes()
+
+    return output
+
 
 
 def udp_receive(sock, blocking=False):
