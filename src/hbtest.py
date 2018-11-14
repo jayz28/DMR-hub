@@ -43,9 +43,12 @@ def main(args):
             (f1, f2, f3) = process_burst(data)
 
             # send the frames to analog_bridge, using the TLV for 72bit frames
-            sendall(b'\x0A\x09' + f1, socket.MSG_DONTWAIT)
-            sendall(b'\x0A\x09' + f2, socket.MSG_DONTWAIT)
-            sendall(b'\x0A\x09' + f3, socket.MSG_DONTWAIT)
+            # sendall(b'\x0A\x09' + f1, socket.MSG_DONTWAIT)
+            # sendall(b'\x0A\x09' + f2, socket.MSG_DONTWAIT)
+            # sendall(b'\x0A\x09' + f3, socket.MSG_DONTWAIT)
+            sendall(f1, socket.MSG_DONTWAIT)
+            sendall(f2, socket.MSG_DONTWAIT)
+            sendall(f3, socket.MSG_DONTWAIT)
         else:
             if time.time() - start > 15:
                 sock.send(b'MSTPING' + dmr_id)
